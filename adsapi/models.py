@@ -351,9 +351,7 @@ class AssignTask(models.Model):
 
 class Notification(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    action_type = models.CharField(max_length=255)
-    target_object_id = models.PositiveIntegerField()
-    content = models.TextField()
+    message = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
-    is_read = models.BooleanField(default=False)
+    
     
