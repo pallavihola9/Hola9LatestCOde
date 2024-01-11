@@ -1,4 +1,5 @@
 import json
+import logging
 from django.conf import UserSettingsHolder
 from django.http import HttpResponse
 from django.shortcuts import render
@@ -19,6 +20,7 @@ from otp_reg.models import *
 from pagesapi.models import *
 from paymentapi.models import *     
 from profileapi.models import * 
+from django.contrib import messages
 
 
 # from rest_framework import serializers
@@ -38,7 +40,23 @@ class ProductView(viewsets.ModelViewSet):
             return queryset.order_by('-id')[:int(limit)]
 
         return queryset
-
+ #################### generating msg when user post ads ################
+    def perform_create(self, serializer):
+        if self.request.user.is_authenticated:
+            product_instance = serializer.save(user=self.request.user)
+            message = f'{self.request.user.name}, your ad "{product_instance.title}" has been posted successfully.'
+            # Fetch the User instance for the current user
+            user_instance = User.objects.get(email=self.request.user.email)
+            notification_data = {
+                'user': user_instance,
+                'posted_user': user_instance,
+                'message': message,
+            }
+            NotificationMessage.objects.create(**notification_data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response({'detail': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+        
 #WishList Views
 from .models import WishListItems
 from rest_framework.generics import CreateAPIView,DestroyAPIView
@@ -2513,16 +2531,7 @@ class TrendingAds(APIView):
             queryset = queryset.order_by('id')
         elif sorting_order == 'default':
             # If older is provided, sort products by id in ascending order (old to latest)
-            queryset = queryset.order_by('?')
-        # if search_key:
-        #             # If search_key is provided, dynamically filter based on all fields
-        #             search_query = Q()
-        #             for field in Product._meta.fields:
-        #                 if field.get_internal_type() in ['CharField', 'TextField', 'DecimalField']:
-        #                     search_query |= Q(**{f"{field.name}__icontains": search_key})
-
-        #             queryset = queryset.filter(search_query)
-        
+            queryset = queryset.order_by('?')         
         if search_key:
             # If search_key is provided, dynamically filter based on specific fields excluding 'image'
             search_query = Q()
@@ -2560,61 +2569,107 @@ class TrendingAds(APIView):
         data = serializers.serialize('json', queryset)
         return HttpResponse(data, content_type='application/json')
     
-##### New Pricing api for new user with ew conditons####
-# for new user they can see 10 ads for free after 10 ads 
-#     they have to purchase plans ,user after getting every 
-#     details it should count by taking userid if 10 ads details 
-#     that user getting after that they have to purchase plan if they are 
-#     taking 99 plan they can get upto 10 ads details only after that again they need to take plan.      
+#################### for getting msg on top 50 view ads ##########################
+    def perform_create(self, serializer):
+        logger = logging.getLogger(__name__)
 
-class ShowAds(APIView):
-    def get(self, request):
-        user_id = request.data.get("user")
-        user = User.objects.get(id=user_id)
-        pricing_obj, created = Pricing.objects.get_or_create(user=user)
-        
-        # Your logic to get ads details from the Pricing model
-        ads_details = {
-            "user": pricing_obj.user_id,
-            "category": pricing_obj.category,
-            "days": pricing_obj.days,
-            "regulars": pricing_obj.remaining_free_ads,
-            
-        }
+        if self.request.user.is_authenticated:
+            product_instance = serializer.save(user=self.request.user)
 
-        return Response(ads_details)
+            # Check if the post is in the top 50 ads
+            top_50_ads = Product.objects.order_by('-viewsproduct')[:50]
+            logger.debug(f'Top 50 Ads: {top_50_ads}')
 
-    def post(self, request):
-        user_id = request.data.get("user")
-        user = User.objects.get(id=user_id)
-        pricing_obj, created = Pricing.objects.get_or_create(user=user)
+            is_top_50 = product_instance in top_50_ads
+            logger.debug(f'Is Top 50: {is_top_50}')
 
-        # Check if the user has reached the free ads limit
-        if pricing_obj.remaining_free_ads <= 0:
-            return Response({"message": "Please purchase a plan to continue viewing ads."})
+            if is_top_50:
+                message = f'Congratulations! Your ad "{product_instance.title}" has entered the Top 50 ads.'
+                user_instance = User.objects.get(email=self.request.user.email)
 
-        # Your logic to process the transaction (assuming it's successful)
-        transaction_success = True  # Replace this with your actual logic
+                # Create a notification for the user
+                notification_data = {
+                    'user': user_instance,
+                    'posted_user': user_instance,
+                    'message': message,
+                }
+                # Save the notification to the database
+                notification = NotificationMessage.objects.create(**notification_data)
+                logger.debug(f'Notification ID: {notification.id}')
 
-        if transaction_success:
-            # Your logic to add a new ad or update the Pricing model with ad details
-            
-            pricing_obj.category = request.data.get("category")  # Update the category as needed
-            pricing_obj.remaining_free_ads -= 1
-            pricing_obj.save()
-
-            # Check if the user has viewed all free ads
-            if pricing_obj.remaining_free_ads == 0:
-                # Prompt the user to purchase a plan
-                return Response({"message": "You have viewed all free ads. Please purchase a plan to continue using ads."})
-            
-            return Response({"message": "Transaction successful! Ad details updated successfully"}, status=status.HTTP_201_CREATED)
+                return Response({
+                    'detail': 'Ad created successfully',
+                    'notification_id': notification.id,
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({'detail': 'Ad created successfully'}, status=status.HTTP_201_CREATED)
         else:
-            return Response({"message": "Transaction failed! Please try again."}, status=status.HTTP_400_BAD_REQUEST)
-
+            return Response({'detail': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
 
 #################### Notification APi for Purches pla,posting add on trending ###################
+class NotificationView(APIView):
+    def get(self, request, *args, **kwargs):
+        # Retrieve notifications for all users based on the 'limit' parameter
+        limit = request.data.get('limit', None)
+       
+        # Order the queryset by 'created_time' in descending order
+        notifications = NotificationMessage.objects.all().order_by('-created_time')
+        user_id = request.data.get('user', None)
+       
+        # If 'user' parameter is provided, retrieve notifications for that user
+        if user_id:
+            notifications = NotificationMessage.objects.filter(user_id=user_id).order_by('-created_time')
+        else:
+            # If 'user' parameter is not provided, retrieve notifications for all users
+            notifications = NotificationMessage.objects.all().order_by('-created_time')
+        if limit:
+            # If 'limit' is provided, retrieve the last 'n' notifications
+            notifications = notifications[:int(limit)]
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+       
+class UserRecentAdsView(APIView):
+    def post(self, request):
+        user = request.user if request.user.is_authenticated else None
+        ads_id = request.data.get('ads_id')
 
-class NotificationAPIView(APIView):
-    def post(self,request,format=None):
-        pass
+        try:
+            # Create a new entry with user and ad details
+            serializer = UserRecentAdsSerializer(data={'user': user.id if user else None, 'ads_id': ads_id})
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
+            return Response({'status': 'Recently viewed ad added successfully.'}, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    
+    def get(self, request,format=None):
+        user=request.data.get("user")
+        limit = request.query_params.get("limit")
+      
+        try:
+            # Retrieve recently viewed ads for the specified user ID
+               
+            user_recent_ads = UserRecentAds.objects.filter(user=user).order_by('-id')
+            # Fetch details for each ads_id from the Product model
+            ad_ids = [user_recent_ad.ads_id for user_recent_ad in user_recent_ads]
+            # if limit is not None:
+            #    product_details = Product.objects.filter(id__in=ad_ids)[:int(limit)]
+            # else:
+            #     product_details = Product.objects.filter(id__in=ad_ids)   
+            product_details = Product.objects.filter(id__in=ad_ids).order_by('-id')[:int(limit)] if limit is not None else Product.objects.filter(id__in=ad_ids)
+            product_serializer = ProductSerializer(product_details, many=True)
+
+            # Serialize the recently viewed ads and their details
+            # user_recent_ads_serializer = UserRecentAdsSerializer(user_recent_ads, many=True)
+
+            response_data = {
+                # 'user_recent_ads': user_recent_ads_serializer.data,
+                'product_details': product_serializer.data
+            }
+          
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        

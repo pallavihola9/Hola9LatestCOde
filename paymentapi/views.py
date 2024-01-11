@@ -578,6 +578,25 @@ class userTransData(APIView):
 		
 		data=serializers.serialize('json',s)
 		return HttpResponse(data, content_type='application/json')
+	
+
+
+from django.shortcuts import get_object_or_404
+from django.http import HttpResponse
+from rest_framework.views import APIView
+from .models import User, TransactionDetails
+# from .utils import http_post, verify_and_get_plan
+
+
+
+
+
+
+
+
+
+
+
 
 # @api_view(['POST'])
 # def start_payment(request):

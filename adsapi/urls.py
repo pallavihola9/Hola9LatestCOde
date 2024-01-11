@@ -64,12 +64,10 @@ urlpatterns = [
     path('assigntaskview/<int:pk>',AssignTaskUpdateDelete.as_view(), name='assigntaskview'),
     
     path('topsellers',TopSellerAdsView.as_view(), name='topsellers'),
-    path('trendingads', TrendingAds.as_view(),name='trendingads'),
-
-    #### New Api for priceplan for new user
-    path('showuserads', ShowAds.as_view(),name='showuserads'),
-    ########## comment notification api  ################
-    path('commentnotify', NotificationAPIView.as_view(),name='commentnotify'),
+    path('trendingads', TrendingAds.as_view(),name='trendingads'), 
+    
+    path('commentnotify', NotificationView.as_view(),name='commentnotify'),
+    path('recentviewads', UserRecentAdsView.as_view(),name='recentviewads'),
 
 
 ]+static(settings.MEDIA_URL,document_root=settings.MEDIA_ROOT)

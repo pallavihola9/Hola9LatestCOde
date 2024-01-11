@@ -34,5 +34,10 @@ class AssignTaskSerializer(serializers.ModelSerializer):
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
-        model=Notification
-        fields='__all__'
+        model = NotificationMessage
+        fields = '__all__'
+
+class UserRecentAdsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserRecentAds
+        fields='__all__'        

@@ -65,7 +65,7 @@ class User(AbstractBaseUser):
   #### add fields for token expire and user login on 3 device not more than 3 #####
   active_devices = models.PositiveIntegerField(default=0)
   token_key = models.CharField(max_length=40, unique=True, null=True, blank=True)
-#   token_created_at = models.DateTimeField(null=True, blank=True)
+  token_created_at = models.DateTimeField(null=True, blank=True)
   token_expiration_time = models.DurationField(default=timezone.timedelta(seconds=1))
 
 ############### Token expire function ########################
