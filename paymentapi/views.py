@@ -3,7 +3,9 @@ import json
 import environ
 import razorpay
 from rest_framework.decorators import api_view
-from rest_framework.response import Response
+from rest_framework.response import Response 
+from rest_framework import status
+
 
 from .models import *
 from .serializers import *
@@ -209,9 +211,45 @@ def callback(request):
 	finalData["status"]=data["status"]
 	s=TransactionDetails.objects.get(payment_token_id=response["layer_pay_token_id"])
 	s.refresh_from_db()
-	s.payment_id=response["layer_payment_id"]
+	s.payment_id=response["layer_payment_id"]	
+############################################## for new user ###############################	
+    # user=NewUser.objects.filter(payment_token_id=responce["layer_pay_token_id"]).first
+	user = NewUser.objects.filter(payment_token_id=response["layer_pay_token_id"]).first
+	if status=="Transaction Successful" and user and user.paymentStatus != "Success":		
+		user.paymentStatus = "Success"
+		finalData['status']="Success"
+		finalData['payment_id']=response["layer_payment_id"]
+		finalData["plan"]=user.plan
+		finalData["email"]=user.email
+		finalData["transactionId"]=user.tranid
+		finalData["amount"]=user.order_payment_amount
+		# Update the ads count based on the user's plan
+        #  if user.plan_valid():
+		# if user.plan_valid():
+        #     user.ads_count += user.ads_value
+        #     user.ads_value = 0  # Reset the free ads count after purchasing a plan
+        #     user.save()
+
+        # # Include other data you want to send in the callback response
+
+        # elif len(error) == 0:
+        #  finalData["status"] = "Failed"
+        # # Update the user's payment status
+        #  user.paymentStatus = "Failed"
+        #  user.save()
+		if user.plan_valid():
+			user.free_view_ads +=user.free_view_ads
+			user.adsValue=0
+			user.save()
+		elif len(error) == 0:
+			finalData["status"] = "Failed"
+			user.paymentStatus = "Failed"
+			user.save()
+            
+	
+	
 	if status=="Transaction Successful" and s.paymentStatus != "Success":
-		s.paymentStatus="Success"
+		s.paymentStatus="Success" 
 		finalData["status"]="Success"
 		finalData["payment_id"]=response["layer_payment_id"]
 		finalData["plan"]=s.plan
@@ -429,9 +467,32 @@ class create_payment_token_Class(APIView):
 			gen["id"]=payment_token_data["id"]
 			gen["mtx"]=data["mtx"]
 			hash=create_hash(gen,accesskey,secretkey)		
-			layer_params = "{payment_token_id:"+payment_token_data["id"]+",accesskey:"+accesskey+"}"
-			token_id=payment_token_data["id"]
-        
+			layer_params = "{payment_token_id:"+payment_token_data["id"]+",accesskey:"+accesskey+"}"	
+			token_id=payment_token_data["id"] 
+			new_user,create = NewUser.objects.get_or_create(user=userData,defaults={
+				'payment_token_id': token_id,
+                'plan': planValue,
+                'email': data["email_id"],
+                'tranid': data["mtx"],
+                'order_payment_amount': data["amount"],
+                'phoneNumber': data["contact_number"],
+                'adsValue': adsValue,
+                'monthsVale': monthsVale,
+                'City': request.data.get("city"),
+			}) 
+			if not created:
+				new_user.payment_token_id = token_id
+				new_user.plan = planValue
+				new_user.email = data["email_id"]
+				new_user.tranid = data["mtx"]
+				new_user.order_payment_amount = data["amount"]
+				new_user.phoneNumber = data["contact_number"]
+				new_user.adsValue = adsValue
+				new_user.monthsVale = monthsVale
+				new_user.City = request.data.get("city")
+				new_user.save()
+#########################################################################3
+			   
 		if len(error) == 0:
 			if payment_token_data["status"]=="paid":
 				assign_payment_status = "Success"
@@ -581,23 +642,44 @@ class userTransData(APIView):
 	
 
 
-from django.shortcuts import get_object_or_404
-from django.http import HttpResponse
-from rest_framework.views import APIView
-from .models import User, TransactionDetails
+class NewUserPricePlan(APIView):
+    def post(self, request, format=None):
+        user_id = request.data.get("user_id")
+        user = NewUser.objects.get(id=user_id)
+
+        # Check if the user has a valid plan and remaining ads
+        if user.plan_valid() and user.free_view_ads > 0:
+            # Decrease the ads count by 1
+            user.free_view_ads -= 1
+            user.save()
+
+            # Include your logic for tracking ad views here
+
+            return Response({"message": "Ad viewed successfully", "remaining_ads": user.free_view_ads}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "Invalid user or no remaining ads"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # from .utils import http_post, verify_and_get_plan
-
-
-
-
-
-
-
-
-
-
-
-
 # @api_view(['POST'])
 # def start_payment(request):
 #     # request.data is coming from frontend

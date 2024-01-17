@@ -24,6 +24,7 @@ urlpatterns = [
     
     path('userTransData', userTransData.as_view(), name='userTransData'),
     path('enquiries', EnquiryListCreate.as_view(), name='enquiries'),
+    path('newpriceplan', NewUserPricePlan.as_view(), name='newpriceplan'),
     
 
 

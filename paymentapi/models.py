@@ -132,3 +132,7 @@ class VerifiedCustomerMain(models.Model):
     plan_type = models.CharField(max_length=100, blank=True, null=True)
     validity=models.CharField(max_length=100, blank=True, null=True)
     OrderID=models.CharField(max_length=100, blank=True, null=True)
+
+class NewUser(models.Model):
+    user = models.ForeignKey(User,on_delete=models.CASCADE)
+    free_view_ads = models.IntegerField(default=0)    

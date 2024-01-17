@@ -28,3 +28,8 @@ class EnquirySerializer(serializers.ModelSerializer):
     class Meta:
         model = Enquiry
         fields = '__all__'
+
+class NewUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=NewUser
+        fields='__all__'        

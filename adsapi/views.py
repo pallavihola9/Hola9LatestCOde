@@ -632,10 +632,11 @@ class allAdsByInerval(APIView):
             limit = int(limit) if limit is not None else None
         except ValueError:
             return JsonResponse({'error': 'Invalid input values'}, status=400)
-
+       
         # Initialize the queryset to get all products
         queryset = Product.objects.all()
-
+         # Get the total length of the queryset without any filters
+        total_length_before_filters = queryset.count()
         if business_plan:
             # If businessplan is True, filter products with plan as "premium" or "featured"
             queryset = queryset.filter(Q(plan="premium") | Q(plan="featured"))
@@ -678,8 +679,12 @@ class allAdsByInerval(APIView):
 
         if start is not None and end is not None:
             # If both start and end are provided, get the last end-start+1 products
+            # count = end - start + 1
+            # queryset = queryset.order_by('-id')[start-1:start-1+count]
             count = end - start + 1
-            queryset = queryset.order_by('-id')[start-1:start-1+count]
+            start_index = max(start - 1, 0)  # Ensure start_index is non-negative
+            end_index = start_index + count
+            queryset = queryset.order_by('-id')[start_index:end_index]
         # elif limit is not None:
         #     # If only limit is provided, get the latest products limited by the specified count
         #     queryset = queryset.order_by('-id')[:limit]
@@ -699,8 +704,28 @@ class allAdsByInerval(APIView):
                 queryset = queryset.order_by('-id')[:limit]
 
         # Serialize the queryset using Django Rest Framework's Response
+         # Get the total length of the queryset after applying filters
+        total_length_after_filters = queryset.count()
+
+        # Serialize the queryset using Django Rest Framework's Response
         data = serializers.serialize('json', queryset)
-        return HttpResponse(data, content_type='application/json')
+
+        # Convert serialized data to Python dictionary
+        data_dict = json.loads(data)
+
+        # Add the total length information to the JSON response
+        data_dict.insert(0, {
+            'total_length_before_filters': total_length_before_filters,
+            'total_length_after_filters': total_length_after_filters
+        })
+
+        # Convert the modified dictionary back to JSON
+        modified_data = json.dumps(data_dict)
+
+        # Return the modified JSON response
+        return HttpResponse(modified_data, content_type='application/json')       
+        # data = serializers.serialize('json', queryset)
+        # return HttpResponse(data, content_type='application/json')
 
 
 # *************************************************************
